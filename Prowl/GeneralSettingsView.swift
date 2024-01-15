@@ -28,12 +28,15 @@ struct GeneralSettingsView: View {
 #if os(macOS)
             .textFieldStyle(.roundedBorder)
 #endif
-            TextField(
-                "API Key",
-                text: $apiKey
-            ).fontDesign(.monospaced).font(.system(size: 15))
+
+            TextField(text: $apiKey, prompt: Text("")) {
+                Text("API Key").fontDesign(.default)
+            }.fontDesign(.monospaced)
+#if os(iOS)
+                .font(.system(size: 15))
+#endif
 #if os(macOS)
-                .textFieldStyle(.roundedBorder)
+.textFieldStyle(.roundedBorder)
 #endif
         }
     }
