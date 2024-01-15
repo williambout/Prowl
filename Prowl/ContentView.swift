@@ -27,37 +27,42 @@ struct ContentView: View {
 
     var body: some View {
         NavigationStack {
-            List(results, id: \.guid) { item in
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(item.title)
-                        .font(.headline)
-                    HStack(spacing: 4) {
-                        if item.downloaded ?? false {
-                            Image(systemName: "arrow.down.circle.fill").font(.caption2).foregroundStyle(.green)
+            VStack {
+                if isLoading {
+                    ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    List(results, id: \.guid) { item in
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(item.title)
+                                .font(.headline)
+                            HStack(spacing: 4) {
+                                if item.downloaded ?? false {
+                                    Image(systemName: "arrow.down.circle.fill").font(.caption2).foregroundStyle(.green)
+                                }
+                                Text(formatter.string(from: item.ageMinutes * 60)!).font(.subheadline).foregroundStyle(.secondary)
+                                Text("·").foregroundStyle(.secondary)
+                                Text(ByteCountFormatter.string(fromByteCount: item.size, countStyle: .file)).font(.subheadline).foregroundStyle(.secondary)
+                                Spacer()
+                                HStack(spacing: 2) {
+                                    Image(systemName: "arrow.up").font(.caption2).foregroundStyle(.secondary)
+                                    Text(String(item.seeders)).font(.subheadline).foregroundStyle(.secondary)
+                                    Image(systemName: "arrow.down").font(.caption2).foregroundStyle(.secondary)
+                                    Text(String(item.leechers)).font(.subheadline).foregroundStyle(.secondary)
+                                }
+                            }
                         }
-                        Text(formatter.string(from: item.ageMinutes * 60)!).font(.subheadline).foregroundStyle(.secondary)
-                        Text("·").foregroundStyle(.secondary)
-                        Text(ByteCountFormatter.string(fromByteCount: item.size, countStyle: .file)).font(.subheadline).foregroundStyle(.secondary)
-                        Spacer()
-                        HStack(spacing: 2) {
-                            Image(systemName: "arrow.up").font(.caption2).foregroundStyle(.secondary)
-                            Text(String(item.seeders)).font(.subheadline).foregroundStyle(.secondary)
-                            Image(systemName: "arrow.down").font(.caption2).foregroundStyle(.secondary)
-                            Text(String(item.leechers)).font(.subheadline).foregroundStyle(.secondary)
-                        }
-                    }
-                }
 #if os(macOS)
-                .padding(4)
+                        .padding(4)
 #endif
-                .swipeActions(edge: .trailing) {
-                    Button { Task { await download(item: item) }} label: {
-                        Label("Download", systemImage: "arrow.down.circle.fill").tint(.indigo)
+                        .swipeActions(edge: .trailing) {
+                            Button { Task { await download(item: item) }} label: {
+                                Label("Download", systemImage: "arrow.down.circle.fill").tint(.indigo)
+                            }
+                        }
                     }
                 }
             }
             .searchable(text: $query)
-
             .refreshable {
                 await search()
             }
@@ -67,9 +72,6 @@ struct ContentView: View {
                 }
             }
             .overlay {
-                if isLoading && results.isEmpty {
-                    ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
                 if results.isEmpty && searched && !isLoading {
                     ContentUnavailableView.search
                 }
@@ -108,8 +110,8 @@ struct ContentView: View {
     }
 
     func search() async {
-        isLoading = true
         searched = true
+        isLoading = true
         var components = URLComponents()
         components.scheme = "https"
         components.host = host
