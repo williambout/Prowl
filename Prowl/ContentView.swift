@@ -17,6 +17,7 @@ struct ContentView: View {
     @State private var results = [Torrent]()
     @State private var query: String = ""
     @State var isPresenting: Bool = false
+    @State var healthyServer: Bool = false
     let formatter = DateComponentsFormatter()
 
     init() {
@@ -71,41 +72,75 @@ struct ContentView: View {
                     await search()
                 }
             }
+            .onAppear {
+                Task {
+                    await health()
+                }
+            }
             .overlay {
+                if !healthyServer && !isLoading {
+                    ContentUnavailableView(
+                        "Not connected",
+                        systemImage: "xmark.icloud.fill",
+                        description: Text("Check your settings")
+                    )
+                }
+                if healthyServer && !isLoading && results.isEmpty {
+                    ContentUnavailableView(
+                        "Connected to \(host)",
+                        systemImage: "checkmark.icloud.fill"
+                    )
+                }
                 if results.isEmpty && searched && !isLoading {
                     ContentUnavailableView.search
                 }
             }
-#if os(iOS)
+#if os(macOS)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem {
                     Button(action: {
-                        isPresenting.toggle()
+                        Task {
+                            await health()
+                        }
                     }, label: {
                         Label(
-                            title: { Text("Settings") },
-                            icon: { Image(systemName: "gear") }
+                            title: { Text("Reconnect") },
+                            icon: { Image(systemName: "arrow.clockwise.icloud") }
                         )
                     })
                 }
             }
-            .sheet(isPresented: $isPresenting) {
-                NavigationView {
-                    GeneralSettingsView()
-                        .navigationTitle("Settings")
-                        .toolbar {
-                            ToolbarItem(placement: .confirmationAction) {
-                                Button(action: {
-                                    isPresenting.toggle()
-                                }, label: {
-                                    Text("Done")
-                                })
-                            }
-                        }
+#endif
+#if os(iOS)
+            .toolbar {
+    ToolbarItem(placement: .topBarLeading) {
+        Button(action: {
+            isPresenting.toggle()
+        }, label: {
+            Label(
+                title: { Text("Settings") },
+                icon: { Image(systemName: "gear") }
+            )
+        })
+    }
+}
+.sheet(isPresented: $isPresenting) {
+    NavigationView {
+        GeneralSettingsView()
+            .navigationTitle("Settings")
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(action: {
+                        isPresenting.toggle()
+                    }, label: {
+                        Text("Done")
+                    })
                 }
             }
+    }
+}
 #endif
-            .navigationTitle("Prowl")
+.navigationTitle("Prowl")
         }
     }
 
@@ -136,6 +171,38 @@ struct ContentView: View {
         } catch {
             print("Checkout failed: \(error.localizedDescription)")
             isLoading = false
+        }
+    }
+
+    func health() async {
+        isLoading = true
+        var components = URLComponents()
+        components.scheme = "https"
+        components.host = host
+        components.path = "/api/v1/health"
+        components.port = Int(port)
+
+        var request = URLRequest(url: components.url!)
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(apiKey, forHTTPHeaderField: "X-Api-Key")
+        request.httpMethod = "GET"
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            if let httpResponse = response as? HTTPURLResponse {
+                print(response)
+                if httpResponse.statusCode == 200 {
+                    healthyServer = true
+                    isLoading = false
+                } else {
+                    healthyServer = false
+                    isLoading = false
+                }
+            }
+        } catch {
+            healthyServer = false
+            isLoading = false
+            print("Checkout failed: \(error.localizedDescription)")
         }
     }
 
