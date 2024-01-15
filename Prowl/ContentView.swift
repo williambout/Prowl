@@ -13,8 +13,10 @@ struct ContentView: View {
     @AppStorage("host") private var host: String = ""
     @AppStorage("port") private var port: String = ""
     @State private var isLoading: Bool = false
+    @State private var searched: Bool = false
     @State private var results = [Torrent]()
     @State private var query: String = ""
+    @State var isPresenting: Bool = false
     let formatter = DateComponentsFormatter()
 
     init() {
@@ -24,46 +26,90 @@ struct ContentView: View {
     }
 
     var body: some View {
-        VStack {
-            if isLoading {
-                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                List(results, id: \.guid) { item in
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(item.title)
-                            .font(.headline)
-                        HStack(spacing: 4) {
-                            if item.downloaded ?? false {
-                                Image(systemName: "arrow.down.circle.fill").font(.caption2).foregroundStyle(.green)
-                            }
-                            Text(formatter.string(from: item.ageMinutes * 60)!).font(.subheadline).foregroundStyle(.secondary)
-                            HStack(spacing: 2) {
-                                Image(systemName: "arrow.up").font(.caption2).foregroundStyle(.secondary)
-                                Text(String(item.seeders)).font(.subheadline).foregroundStyle(.secondary)
-                                Image(systemName: "arrow.down").font(.caption2).foregroundStyle(.secondary)
-                                Text(String(item.leechers)).font(.subheadline).foregroundStyle(.secondary)
-                            }
-                            Text(ByteCountFormatter.string(fromByteCount: item.size, countStyle: .file)).font(.subheadline).foregroundStyle(.secondary)
+        NavigationStack {
+            List(results, id: \.guid) { item in
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(item.title)
+                        .font(.headline)
+                    HStack(spacing: 4) {
+                        if item.downloaded ?? false {
+                            Image(systemName: "arrow.down.circle.fill").font(.caption2).foregroundStyle(.green)
                         }
-                    }.padding(4)
-                        .swipeActions(edge: .trailing) {
-                            Button { Task { await download(item: item) }} label: {
-                                Label("Download", systemImage: "arrow.down.circle.fill")
+                        Text(formatter.string(from: item.ageMinutes * 60)!).font(.subheadline).foregroundStyle(.secondary)
+                        Text("·").foregroundStyle(.secondary)
+                        Text(ByteCountFormatter.string(fromByteCount: item.size, countStyle: .file)).font(.subheadline).foregroundStyle(.secondary)
+                        Spacer()
+                        HStack(spacing: 2) {
+                            Image(systemName: "arrow.up").font(.caption2).foregroundStyle(.secondary)
+                            Text(String(item.seeders)).font(.subheadline).foregroundStyle(.secondary)
+                            Image(systemName: "arrow.down").font(.caption2).foregroundStyle(.secondary)
+                            Text(String(item.leechers)).font(.subheadline).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+#if os(macOS)
+                .padding(4)
+#endif
+                .swipeActions(edge: .trailing) {
+                    Button { Task { await download(item: item) }} label: {
+                        Label("Download", systemImage: "arrow.down.circle.fill").tint(.indigo)
+                    }
+                }
+            }
+            .searchable(text: $query)
+
+            .refreshable {
+                await search()
+            }
+            .onSubmit(of: .search) {
+                Task {
+                    await search()
+                }
+            }
+            .overlay {
+                if isLoading && results.isEmpty {
+                    ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+                if results.isEmpty && searched && !isLoading {
+                    ContentUnavailableView.search
+                }
+            }
+#if os(iOS)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(action: {
+                        isPresenting.toggle()
+                    }, label: {
+                        Label(
+                            title: { Text("Settings") },
+                            icon: { Image(systemName: "gear") }
+                        )
+                    })
+                }
+            }
+            .sheet(isPresented: $isPresenting) {
+                NavigationView {
+                    GeneralSettingsView()
+                        .navigationTitle("Settings")
+                        .toolbar {
+                            ToolbarItem(placement: .confirmationAction) {
+                                Button(action: {
+                                    isPresenting.toggle()
+                                }, label: {
+                                    Text("Done")
+                                })
                             }
                         }
                 }
             }
-        }
-        .searchable(text: $query)
-        .onSubmit(of: .search) {
-            Task {
-                await search()
-            }
+#endif
+            .navigationTitle("Prowl")
         }
     }
 
     func search() async {
         isLoading = true
+        searched = true
         var components = URLComponents()
         components.scheme = "https"
         components.host = host
@@ -81,10 +127,10 @@ struct ContentView: View {
 
         do {
             let (data, _) = try await URLSession.shared.data(for: request)
-            isLoading = false
             if let decodedResponse = try? JSONDecoder().decode([Torrent].self, from: data) {
                 results = decodedResponse
             }
+            isLoading = false
         } catch {
             print("Checkout failed: \(error.localizedDescription)")
             isLoading = false

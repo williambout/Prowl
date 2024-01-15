@@ -18,17 +18,24 @@ struct GeneralSettingsView: View {
                 "Host",
                 text: $host
             )
+#if os(macOS)
+            .textFieldStyle(.roundedBorder)
+#endif
             TextField(
                 "Port",
                 text: $port
             )
+#if os(macOS)
+            .textFieldStyle(.roundedBorder)
+#endif
             TextField(
                 "API Key",
                 text: $apiKey
-            )
+            ).fontDesign(.monospaced).font(.system(size: 15))
+#if os(macOS)
+                .textFieldStyle(.roundedBorder)
+#endif
         }
-        .padding(20)
-        .frame(width: 350, height: 100)
     }
 }
 
